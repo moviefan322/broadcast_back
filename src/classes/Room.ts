@@ -1,5 +1,4 @@
-import type { Socket } from "socket.io";
-import type { Worker, Router } from "mediasoup/types";
+import type { Worker, Router, Producer } from "mediasoup/types";
 import { Client } from "./Client.js";
 
 export class Room {
@@ -7,6 +6,7 @@ export class Room {
   worker: Worker;
   router: Router | null;
   clients: Client[];
+  producer: Producer | null = null;
   constructor(roomName: string, workerToUse: Worker) {
     this.roomName = roomName;
     this.worker = workerToUse;
@@ -27,5 +27,12 @@ export class Room {
   }
   addClient(client: Client) {
     this.clients.push(client);
+  }
+  setProducer(newProducer: Producer) {
+    if (this.producer && !this.producer.closed) {
+      throw new Error("Room already has a producer");
+    }
+
+    this.producer = newProducer;
   }
 }

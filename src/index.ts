@@ -49,8 +49,8 @@ io.on("connect", (socket) => {
   console.log("connected:", socket.id);
 
   // initialize client
-  let client;
-  
+  let client: Client;
+
   // handshake info
   // use later for authentication and authorization
   // const handshake = socket.handshake;
@@ -66,7 +66,7 @@ io.on("connect", (socket) => {
       newRoom = true;
       // make new room, add worker, add router
       if (!workers) {
-        ack({ ok: "false", error: "no workers" });
+        ack({ ok: false, error: "no workers" });
         return;
       }
       const workerToUse = await getWorker(workers);
@@ -83,8 +83,63 @@ io.on("connect", (socket) => {
 
     // what we want to pass for now:
     ack({
+      ok: true,
       routerRtpCapabilities: client?.room?.router?.rtpCapabilities,
       newRoom,
     });
+  });
+
+  socket.on("requestTransport", async ({ type }, ack) => {
+    // producers and consumers need params
+    let clientTransportParams = null;
+    if (type === "producer") {
+      // run addTransport, part of our client class
+      clientTransportParams = await client.addTransport(type);
+    } else if (type === "consumer") {
+    }
+    ack({ ok: true, paramsFromServer: clientTransportParams });
+  });
+
+  socket.on("connectTransport", async ({ dtlsParameters, type }, ack) => {
+    if (type === "producer") {
+      try {
+        await client.upstreamTransport?.connect({ dtlsParameters });
+        ack({ ok: true });
+      } catch (error) {
+        console.error("Error connecting transport:", error);
+        ack({ ok: false, error: "Failed to connect transport" });
+      }
+    } else if (type === "consumer") {
+      // do consumer part!
+    }
+  });
+
+  socket.on("startProducing", async ({ rtpParameters }, ack) => {
+    // create a producer with rtp paramters
+    try {
+      if (!client.room) {
+        ack({ ok: false, error: "Client is not in a room" });
+        return;
+      }
+
+      if (!client.upstreamTransport) {
+        ack({ ok: false, error: "No upstream transport" });
+        return;
+      }
+      const newProducer = await client.upstreamTransport?.produce({
+        rtpParameters,
+        kind: "audio",
+      });
+      if (!newProducer) {
+        ack({ ok: false, error: "Failed to create producer" });
+        return;
+      }
+      client.addProducer(newProducer);
+      client?.room?.setProducer(newProducer);
+      ack({ ok: true, producerId: newProducer?.id });
+    } catch (error) {
+      console.log("Error starting producer:", error);
+      ack({ ok: false, error });
+    }
   });
 });
