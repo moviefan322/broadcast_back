@@ -81,11 +81,11 @@ io.on("connect", (socket) => {
     // add this socket to the socket room
     socket.join(client.room.roomName);
 
-    // what we want to pass for now:
     ack({
       ok: true,
       routerRtpCapabilities: client?.room?.router?.rtpCapabilities,
       newRoom,
+      producerAvailable: !!client.room.producer,
     });
   });
 
@@ -96,6 +96,13 @@ io.on("connect", (socket) => {
       // run addTransport, part of our client class
       clientTransportParams = await client.addTransport(type);
     } else if (type === "consumer") {
+      // run addTransport
+      clientTransportParams = await client.addTransport(type);
+      console.log(
+        "server downstream transport:",
+        client.downstreamTransport?.id,
+      );
+      console.log("sending params id:", clientTransportParams.id);
     }
     ack({ ok: true, paramsFromServer: clientTransportParams });
   });
@@ -110,7 +117,13 @@ io.on("connect", (socket) => {
         ack({ ok: false, error: "Failed to connect transport" });
       }
     } else if (type === "consumer") {
-      // do consumer part!
+      await client.downstreamTransport?.connect({ dtlsParameters });
+      ack({ ok: true });
+      try {
+      } catch (err) {
+        console.log("Error connecting consumer transport:", err);
+        ack({ ok: false, error: "Failed to connect consumer transport" });
+      }
     }
   });
 
@@ -138,8 +151,92 @@ io.on("connect", (socket) => {
       client?.room?.setProducer(newProducer);
       ack({ ok: true, producerId: newProducer?.id });
     } catch (error) {
-      console.log("Error starting producer:", error);
-      ack({ ok: false, error });
+      const message = error instanceof Error ? error.message : String(error);
+
+      console.log("Error starting producer:", message);
+
+      ack({ ok: false, error: message });
+    }
+  });
+  socket.on("consumeMedia", async ({ rtpCapabilities }, ack) => {
+    // set up clientConsumer, send back params
+    // use right transport, add/update consumer in client
+    // confirm canConsume
+    try {
+      const producer = client?.room?.producer;
+      if (!producer) {
+        ack({ ok: false, error: "No producer in room" });
+        return;
+      }
+      if (
+        !client?.room?.router?.canConsume({
+          producerId: producer.id,
+          rtpCapabilities,
+        })
+      ) {
+        ack({ ok: false, error: "Cannot consume" });
+        return;
+      } else {
+        const newConsumer = await client.downstreamTransport?.consume({
+          producerId: producer.id,
+          rtpCapabilities,
+          paused: true,
+        });
+        if (!newConsumer) {
+          ack({ ok: false, error: "Failed to create consumer" });
+          return;
+        }
+        console.log("server consumer created:", {
+          id: newConsumer.id,
+          paused: newConsumer.paused,
+          producerId: producer.id,
+        });
+        client.addConsumer(newConsumer);
+        const consumerParams = {
+          producerId: producer.id,
+          id: newConsumer.id,
+          kind: newConsumer.kind,
+          rtpParameters: newConsumer.rtpParameters,
+        };
+        ack({ ok: true, consumerParams });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      console.log("Error starting producer:", message);
+
+      ack({ ok: false, error: message });
+    }
+  });
+  socket.on("unpauseConsumer", async (ack) => {
+    console.log("Received unpauseConsumer event");
+
+    try {
+      if (!client.consumer) {
+        console.log("No server-side consumer found on client");
+        ack({ ok: false, error: "No consumer to resume" });
+        return;
+      }
+
+      console.log("before resume:", {
+        id: client.consumer.id,
+        paused: client.consumer.paused,
+      });
+
+      await client.consumer.resume();
+
+      console.log("after resume:", {
+        id: client.consumer.id,
+        paused: client.consumer.paused,
+      });
+
+      ack({ ok: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      console.log("Error resuming consumer:", message);
+
+      ack({ ok: false, error: message });
     }
   });
 });

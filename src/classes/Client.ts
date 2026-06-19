@@ -4,6 +4,7 @@ import type {
   IceCandidate,
   DtlsParameters,
   Producer,
+  Consumer,
 } from "mediasoup/types";
 import type { Socket } from "socket.io";
 import { Room } from "./Room.js";
@@ -25,7 +26,9 @@ export class Client {
   socket: Socket;
   room: Room | null = null;
   upstreamTransport: WebRtcTransport | null = null;
+  downstreamTransport: WebRtcTransport | null = null;
   producer: Producer | null = null;
+  consumer: Consumer | null = null;
 
   constructor(userName: string, socket: Socket) {
     this.userName = userName;
@@ -40,16 +43,17 @@ export class Client {
       listenInfos: [
         {
           protocol: "udp",
-          ip: "0.0.0.0",
-          announcedAddress: ANNOUNCED_ADDRESS,
+          ip: "127.0.0.1",
+        //   announcedAddress: ANNOUNCED_ADDRESS,
         },
         {
           protocol: "tcp",
-          ip: "0.0.0.0",
-          announcedAddress: ANNOUNCED_ADDRESS,
+          ip: "127.0.0.1",
+        //   announcedAddress: ANNOUNCED_ADDRESS,
         },
       ],
     });
+    
     const clientTransportParams: ClientTransportParams = {
       id: transport?.id || "",
       iceParameters: transport?.iceParameters || ({} as IceParameters),
@@ -62,6 +66,7 @@ export class Client {
       this.upstreamTransport = transport as WebRtcTransport;
     } else if (type === "consumer") {
       // SET DOWNSTREAM TRANSPORT
+      this.downstreamTransport = transport as WebRtcTransport;
     }
 
     return clientTransportParams;
@@ -69,5 +74,8 @@ export class Client {
 
   addProducer(newProducer: Producer) {
     this.producer = newProducer;
+  }
+  addConsumer(newConsumer: Consumer) {
+    this.consumer = newConsumer;
   }
 }
