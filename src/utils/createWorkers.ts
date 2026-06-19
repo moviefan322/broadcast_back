@@ -1,27 +1,27 @@
-import os from "os";
+import os from "node:os";
 import * as mediasoup from "mediasoup";
+import type { Worker } from "mediasoup/types";
 
 const totalThreads = os.cpus().length;
 
-export const createWorkers = () =>
-  new Promise(async (resolve, reject) => {
-    let workers = [];
-    // loop to create workers based on number of threads
-    for (let i = 0; i < totalThreads; i++) {
-      const worker = await mediasoup.createWorker({
-        rtcMinPort: 40000,
-        rtcMaxPort: 41000,
-        logLevel: "warn",
-        logTags: ["info", "ice", "dtls", "rtp", "srtp", "rtcp"],
-      });
-    //   console.log(`worker ${worker.pid} created`);
-      worker.on("died", () => {
-        // this should never happen
-        console.log("mediasoup worker has died");
-        process.exit(1); // kill node program
-      });
-      workers.push(worker);
-    }
+export const createWorkers = async (): Promise<Worker[]> => {
+  const workers: Worker[] = [];
 
-    resolve(workers);
-  });
+  for (let i = 0; i < totalThreads; i++) {
+    const worker = await mediasoup.createWorker({
+      rtcMinPort: 40000,
+      rtcMaxPort: 41000,
+      logLevel: "warn",
+      logTags: ["info", "ice", "dtls", "rtp", "srtp", "rtcp"],
+    });
+
+    worker.on("died", () => {
+      console.log("mediasoup worker has died");
+      process.exit(1);
+    });
+
+    workers.push(worker);
+  }
+
+  return workers;
+};
