@@ -7,7 +7,7 @@ import type {
   Consumer,
 } from "mediasoup/types";
 import type { Socket } from "socket.io";
-import { Room } from "./Room.js";
+import type { Room } from "./Room.js";
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
@@ -48,7 +48,7 @@ export class Client {
         "Cannot create transport before client has joined a room",
       );
     }
-    const transport = await this.room?.router?.createWebRtcTransport({
+    const transport = await this.room.router.createWebRtcTransport({
       enableUdp: true,
       enableTcp: true,
       preferUdp: true,
@@ -73,6 +73,10 @@ export class Client {
       console.log(`${type} server DTLS state:`, state);
     });
 
+    transport.on("@close", () => {
+      console.log(`${type} server transport closed`);
+    });
+
     const clientTransportParams: ClientTransportParams = {
       id: transport.id,
       iceParameters: transport.iceParameters,
@@ -94,5 +98,29 @@ export class Client {
   }
   addConsumer(newConsumer: Consumer) {
     this.consumer = newConsumer;
+  }
+  closeMedia() {
+    console.log("closing media for client:", this.userName);
+
+    if (this.consumer && !this.consumer.closed) {
+      this.consumer.close();
+    }
+
+    if (this.producer && !this.producer.closed) {
+      this.producer.close();
+    }
+
+    if (this.downstreamTransport && !this.downstreamTransport.closed) {
+      this.downstreamTransport.close();
+    }
+
+    if (this.upstreamTransport && !this.upstreamTransport.closed) {
+      this.upstreamTransport.close();
+    }
+
+    this.consumer = null;
+    this.producer = null;
+    this.downstreamTransport = null;
+    this.upstreamTransport = null;
   }
 }

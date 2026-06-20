@@ -1,5 +1,5 @@
 import type { Worker, Router, Producer } from "mediasoup/types";
-import { Client } from "./Client.js";
+import type { Client } from "./Client.js";
 
 export class Room {
   roomName: string;
@@ -34,5 +34,31 @@ export class Room {
     }
 
     this.producer = newProducer;
+  }
+  removeClient(socketId: string) {
+    this.clients = this.clients.filter(
+      (client) => client.socket.id !== socketId,
+    );
+  }
+
+  closeRoom() {
+    console.log("closing room:", this.roomName);
+
+    for (const client of this.clients) {
+      client.closeMedia();
+      client.socket.leave(this.roomName);
+    }
+
+    if (this.producer && !this.producer.closed) {
+      this.producer.close();
+    }
+
+    if (this.router && !this.router.closed) {
+      this.router.close();
+    }
+
+    this.clients = [];
+    this.producer = null;
+    this.router = null;
   }
 }

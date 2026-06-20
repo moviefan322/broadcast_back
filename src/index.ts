@@ -239,4 +239,60 @@ io.on("connect", (socket) => {
       ack({ ok: false, error: message });
     }
   });
+  socket.on("disconnect", (reason) => {
+    console.log("socket disconnected:", socket.id, reason);
+
+    if (!client) {
+      console.log("disconnected socket had no client yet");
+      return;
+    }
+
+    const room = client.room;
+
+    if (!room) {
+      client.closeMedia();
+      return;
+    }
+
+    const wasBroadcaster =
+      !!client.producer && room.producer?.id === client.producer.id;
+
+    if (wasBroadcaster) {
+      console.log("broadcaster disconnected, closing room:", room.roomName);
+
+      socket.to(room.roomName).emit("roomClosed", {
+        reason: "broadcaster-disconnected",
+      });
+
+      room.closeRoom();
+
+      const roomIndex = rooms.findIndex((r) => r.roomName === room.roomName);
+
+      if (roomIndex !== -1) {
+        rooms.splice(roomIndex, 1);
+      }
+
+      console.log("room removed:", room.roomName);
+
+      return;
+    }
+
+    console.log("non-broadcaster disconnected:", client.userName);
+
+    client.closeMedia();
+    room.removeClient(socket.id);
+    socket.leave(room.roomName);
+
+    if (room.clients.length === 0) {
+      console.log("empty room, closing:", room.roomName);
+
+      room.closeRoom();
+
+      const roomIndex = rooms.findIndex((r) => r.roomName === room.roomName);
+
+      if (roomIndex !== -1) {
+        rooms.splice(roomIndex, 1);
+      }
+    }
+  });
 });
