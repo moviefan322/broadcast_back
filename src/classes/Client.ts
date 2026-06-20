@@ -9,8 +9,15 @@ import type {
 import type { Socket } from "socket.io";
 import { Room } from "./Room.js";
 
-const ANNOUNCED_ADDRESS =
-  process.env.MEDIASOUP_ANNOUNCED_ADDRESS || "127.0.0.1";
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
+const MEDIASOUP_LISTEN_IP = IS_PRODUCTION ? "0.0.0.0" : "127.0.0.1";
+
+const MEDIASOUP_ANNOUNCED_ADDRESS = process.env.MEDIASOUP_ANNOUNCED_ADDRESS;
+
+if (IS_PRODUCTION && !MEDIASOUP_ANNOUNCED_ADDRESS) {
+  throw new Error("MEDIASOUP_ANNOUNCED_ADDRESS is required in production");
+}
 
 type ClientTransportParams = {
   id: string;
@@ -36,6 +43,11 @@ export class Client {
     this.room = null;
   }
   async addTransport(type: TransportType): Promise<ClientTransportParams> {
+    if (!this.room?.router) {
+      throw new Error(
+        "Cannot create transport before client has joined a room",
+      );
+    }
     const transport = await this.room?.router?.createWebRtcTransport({
       enableUdp: true,
       enableTcp: true,
@@ -43,30 +55,35 @@ export class Client {
       listenInfos: [
         {
           protocol: "udp",
-          ip: "127.0.0.1",
-        //   announcedAddress: ANNOUNCED_ADDRESS,
+          ip: MEDIASOUP_LISTEN_IP,
+          announcedAddress: MEDIASOUP_ANNOUNCED_ADDRESS,
         },
         {
           protocol: "tcp",
-          ip: "127.0.0.1",
-        //   announcedAddress: ANNOUNCED_ADDRESS,
+          ip: MEDIASOUP_LISTEN_IP,
+          announcedAddress: MEDIASOUP_ANNOUNCED_ADDRESS,
         },
       ],
     });
-    
+    transport.on("icestatechange", (state) => {
+      console.log(`${type} server ICE state:`, state);
+    });
+
+    transport.on("dtlsstatechange", (state) => {
+      console.log(`${type} server DTLS state:`, state);
+    });
+
     const clientTransportParams: ClientTransportParams = {
-      id: transport?.id || "",
-      iceParameters: transport?.iceParameters || ({} as IceParameters),
-      iceCandidates: transport?.iceCandidates || ([] as IceCandidate[]),
-      dtlsParameters: transport?.dtlsParameters || ({} as DtlsParameters),
+      id: transport.id,
+      iceParameters: transport.iceParameters,
+      iceCandidates: transport.iceCandidates,
+      dtlsParameters: transport.dtlsParameters,
     };
 
     if (type === "producer") {
-      // set new transport to this client's upstreamTransport
-      this.upstreamTransport = transport as WebRtcTransport;
+      this.upstreamTransport = transport;
     } else if (type === "consumer") {
-      // SET DOWNSTREAM TRANSPORT
-      this.downstreamTransport = transport as WebRtcTransport;
+      this.downstreamTransport = transport;
     }
 
     return clientTransportParams;
