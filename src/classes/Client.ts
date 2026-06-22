@@ -11,12 +11,24 @@ import type { Room } from "./Room.js";
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
-const MEDIASOUP_LISTEN_IP = IS_PRODUCTION ? "0.0.0.0" : "127.0.0.1";
-
-const MEDIASOUP_ANNOUNCED_ADDRESS = process.env.MEDIASOUP_ANNOUNCED_ADDRESS;
+const MEDIASOUP_ANNOUNCED_ADDRESS = IS_PRODUCTION
+  ? process.env.MEDIASOUP_ANNOUNCED_ADDRESS
+  : undefined;
 
 if (IS_PRODUCTION && !MEDIASOUP_ANNOUNCED_ADDRESS) {
   throw new Error("MEDIASOUP_ANNOUNCED_ADDRESS is required in production");
+}
+
+const MEDIASOUP_LISTEN_IP = IS_PRODUCTION ? "0.0.0.0" : "127.0.0.1";
+
+function buildListenInfo(protocol: "udp" | "tcp") {
+  return {
+    protocol,
+    ip: MEDIASOUP_LISTEN_IP,
+    ...(MEDIASOUP_ANNOUNCED_ADDRESS
+      ? { announcedAddress: MEDIASOUP_ANNOUNCED_ADDRESS }
+      : {}),
+  };
 }
 
 type ClientTransportParams = {
@@ -52,18 +64,7 @@ export class Client {
       enableUdp: true,
       enableTcp: true,
       preferUdp: true,
-      listenInfos: [
-        {
-          protocol: "udp",
-          ip: MEDIASOUP_LISTEN_IP,
-          announcedAddress: MEDIASOUP_ANNOUNCED_ADDRESS,
-        },
-        {
-          protocol: "tcp",
-          ip: MEDIASOUP_LISTEN_IP,
-          announcedAddress: MEDIASOUP_ANNOUNCED_ADDRESS,
-        },
-      ],
+      listenInfos: [buildListenInfo("udp"), buildListenInfo("tcp")],
     });
     transport.on("icestatechange", (state) => {
       console.log(`${type} server ICE state:`, state);

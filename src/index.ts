@@ -1,5 +1,6 @@
 import "dotenv/config";
 
+import type { Socket } from "socket.io";
 import type { Worker } from "mediasoup/types";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
@@ -45,8 +46,12 @@ const initMediaSoup = async () => {
 
 initMediaSoup();
 
-io.on("connect", (socket) => {
+io.on("connection", (socket: Socket) => {
   console.log("connected:", socket.id);
+
+  socket.onAny((event, ...args) => {
+    console.log("RTC socket event:", event, args);
+  });
 
   // initialize client
   let client: Client;
@@ -57,6 +62,7 @@ io.on("connect", (socket) => {
   // console.log("handshake:", handshake);
 
   socket.on("joinRoom", async ({ userName, roomName }, ack) => {
+    console.log(`joinRoom request: userName=${userName}, roomName=${roomName}`);
     let newRoom = false;
     client = new Client(userName, socket);
     // check if room exists
